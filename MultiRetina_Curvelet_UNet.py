@@ -13,11 +13,314 @@ from scipy.ndimage import (
 from skimage.transform import resize
 from skimage.morphology import disk, skeletonize
 
-from CurveletGuidedDRIVE_UNet import (
-    ensure_dir, matlab_uint8, normalize01, save_png,
-    make_fdct_operator,
-    get_model_classes, dice_loss_from_logits
-)
+def ensure_dir(path):
+    path = Path(path)
+    if str(path) not in ["", "."]:
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def matlab_uint8(x):
+    x = np.asarray(x)
+    x = np.clip(x, 0, 255)
+    return x.astype(np.uint8)
+
+
+def normalize01(x, mask=None, eps=1e-8):
+    x = np.asarray(x, dtype=np.float32)
+
+    if mask is not None and np.any(mask):
+        vals = x[mask]
+    else:
+        vals = x.reshape(-1)
+
+    vals = vals[np.isfinite(vals)]
+
+    if vals.size == 0:
+        return np.zeros_like(x, dtype=np.float32)
+
+    lo = np.percentile(vals, 1)
+    hi = np.percentile(vals, 99)
+
+    if abs(hi - lo) < eps:
+        return np.zeros_like(x, dtype=np.float32)
+
+    y = (x - lo) / (hi - lo)
+    return np.clip(y, 0, 1).astype(np.float32)
+
+
+def save_png(path, img):
+    ensure_dir(Path(path).parent)
+    img = np.asarray(img)
+
+    if img.dtype == bool:
+        out = img.astype(np.uint8) * 255
+    else:
+        out = matlab_uint8(normalize01(img) * 255)
+
+    iio.imwrite(path, out)
+
+
+def make_fdct_operator(shape):
+    import curvelops as cl
+
+    return cl.FDCT2D(
+        dims=shape,
+        nbscales=6,
+        nbangles_coarse=32,
+        allcurvelets=False,
+        dtype="complex128",
+    )
+
+
+# =============================================================================
+# Classical curvelet helper functions
+# These are included here so this repository does NOT depend on
+# CurveletGuidedDRIVE_UNet.py.
+# =============================================================================
+
+def local_green_enhancement(green):
+    """
+    Local green-channel enhancement used by the earlier curvelet pipeline.
+    This is kept for compatibility with vessel_seg.py.
+    """
+    from scipy.ndimage import uniform_filter, maximum_filter
+
+    green = green.astype(np.float64)
+    m, n = green.shape
+
+    padded = np.zeros((m + 10, n + 10), dtype=np.float64)
+    padded[4:m + 4, 4:n + 4] = green
+
+    mean9 = uniform_filter(padded, size=9, mode="constant", cval=0.0)
+    max9 = maximum_filter(padded, size=9, mode="constant", cval=0.0)
+
+    enhanced = (
+        5.0 * padded[4:m + 4, 4:n + 4]
+        - 4.0 * mean9[4:m + 4, 4:n + 4]
+        + (80.0 * mean9[4:m + 4, 4:n + 4])
+        / (max9[4:m + 4, 4:n + 4] + 1.0)
+    )
+
+    return enhanced
+
+
+def greycontrast8(D, m, st):
+    """
+    Coefficient contrast operation adapted from the MATLAB/curvelet pipeline.
+    The real part is processed and returned as complex128 for FDCT compatibility.
+    """
+    D = np.asarray(D).copy()
+    realD = np.real(D).copy()
+
+    M = np.max(realD)
+    p = 0.2
+    spo = 0.3
+    no = 0.1 * M
+
+    if abs(no) < 1e-12:
+        return D
+
+    out = realD.copy()
+
+    mask1 = realD < 0.5 * no
+    out[mask1] = 2.0 * realD[mask1]
+
+    mask2 = (0.5 * no < realD) & (realD < 3.0 * no)
+    if np.any(mask2):
+        s = (((realD[mask2] - no) / no) * ((m / no) ** p)) + (
+            (2.0 * no - realD[mask2]) / no
+        )
+        out[mask2] = np.abs(realD[mask2]) * s
+
+    mask3 = (3.0 * no < realD) & (realD < 4.0 * no)
+    if np.any(mask3):
+        denom = realD[mask3]
+        safe = np.abs(denom) > 1e-12
+        tmp = out[mask3]
+        tmp[safe] = ((m / denom[safe]) ** p) * np.abs(denom[safe])
+        out[mask3] = tmp
+
+    mask4 = realD > 4.0 * no
+    if np.any(mask4):
+        denom = realD[mask4]
+        safe = np.abs(denom) > 1e-12
+        tmp = out[mask4]
+        tmp[safe] = ((m / denom[safe]) ** spo) * denom[safe]
+        out[mask4] = tmp
+
+    return out.astype(np.complex128)
+
+
+def mim_eslah_zarayeb(D, sa=2):
+    """
+    Placeholder for the MATLAB coefficient-correction step.
+    In the currently used MATLAB version this step returns the coefficients.
+    """
+    return D
+
+
+def edgenhance(D):
+    """
+    Placeholder for the MATLAB edge-enhancement step.
+    In the currently used MATLAB version this step suppresses low-scale coefficients.
+    """
+    return np.zeros_like(D)
+
+
+def inverse_fdct(fdct, coeff_struct, shape):
+    coeff_vector = fdct.vect(coeff_struct)
+    rec = fdct.H @ coeff_vector
+    return np.real(np.asarray(rec).reshape(shape))
+
+
+def curvelet_greycontrast_step(img):
+    """
+    First curvelet enhancement step used by the single-image inference script.
+    """
+    img = img.astype(np.float64)
+    shape = img.shape
+
+    p1, p99 = np.percentile(img, [1, 99])
+    if p99 > p1:
+        img_n = (img - p1) / (p99 - p1)
+        img_n = np.clip(img_n, 0.0, 1.0) * 255.0
+    else:
+        img_n = img.copy()
+
+    st = np.std(img_n)
+    M = np.percentile(img_n, 99)
+    m = 0.1 * M
+
+    fdct = make_fdct_operator(shape)
+    coeff = fdct @ img_n.astype(np.complex128)
+    coeff_struct = fdct.struct(np.asarray(coeff).ravel())
+
+    weights = [0.0, 0.05, 0.6, 1.0, 0.7, 0.3]
+
+    new_struct = []
+    for s, scale in enumerate(coeff_struct):
+        w = weights[s] if s < len(weights) else 0.3
+        new_scale = []
+        for wedge in scale:
+            new_scale.append(w * greycontrast8(wedge, m, st))
+        new_struct.append(new_scale)
+
+    return inverse_fdct(fdct, new_struct, shape)
+
+
+def curvelet_edge_step(img):
+    """
+    Second curvelet enhancement step used by the single-image inference script.
+    """
+    img = img.astype(np.float64)
+    shape = img.shape
+
+    p1, p99 = np.percentile(img, [1, 99])
+    if p99 > p1:
+        img_n = (img - p1) / (p99 - p1)
+        img_n = np.clip(img_n, 0.0, 1.0) * 255.0
+    else:
+        img_n = img.copy()
+
+    fdct = make_fdct_operator(shape)
+    coeff = fdct @ img_n.astype(np.complex128)
+    coeff_struct = fdct.struct(np.asarray(coeff).ravel())
+
+    weights = [0.0, 0.15, 0.8, 1.0, 0.8, 0.4]
+
+    new_struct = []
+    for s, scale in enumerate(coeff_struct):
+        w = weights[s] if s < len(weights) else 0.4
+        new_scale = []
+        for wedge in scale:
+            if s in [0, 1]:
+                processed = edgenhance(wedge)
+            else:
+                processed = mim_eslah_zarayeb(wedge, 1.5)
+            new_scale.append(w * processed)
+        new_struct.append(new_scale)
+
+    return inverse_fdct(fdct, new_struct, shape)
+
+
+# =============================================================================
+# PyTorch model and loss
+# Included here so no external DRIVE-specific script is required.
+# =============================================================================
+
+def get_model_classes():
+    import torch
+    import torch.nn as nn
+
+    class DoubleConv(nn.Module):
+        def __init__(self, in_ch, out_ch):
+            super().__init__()
+            self.net = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+
+        def forward(self, x):
+            return self.net(x)
+
+    class SmallUNet(nn.Module):
+        def __init__(self, in_channels=8, base=32):
+            super().__init__()
+
+            self.enc1 = DoubleConv(in_channels, base)
+            self.enc2 = DoubleConv(base, base * 2)
+            self.enc3 = DoubleConv(base * 2, base * 4)
+            self.enc4 = DoubleConv(base * 4, base * 8)
+
+            self.pool = nn.MaxPool2d(2)
+
+            self.up3 = nn.ConvTranspose2d(base * 8, base * 4, kernel_size=2, stride=2)
+            self.dec3 = DoubleConv(base * 8, base * 4)
+
+            self.up2 = nn.ConvTranspose2d(base * 4, base * 2, kernel_size=2, stride=2)
+            self.dec2 = DoubleConv(base * 4, base * 2)
+
+            self.up1 = nn.ConvTranspose2d(base * 2, base, kernel_size=2, stride=2)
+            self.dec1 = DoubleConv(base * 2, base)
+
+            self.out = nn.Conv2d(base, 1, kernel_size=1)
+
+        def forward(self, x):
+            e1 = self.enc1(x)
+            e2 = self.enc2(self.pool(e1))
+            e3 = self.enc3(self.pool(e2))
+            e4 = self.enc4(self.pool(e3))
+
+            d3 = self.up3(e4)
+            d3 = self.dec3(torch.cat([d3, e3], dim=1))
+
+            d2 = self.up2(d3)
+            d2 = self.dec2(torch.cat([d2, e2], dim=1))
+
+            d1 = self.up1(d2)
+            d1 = self.dec1(torch.cat([d1, e1], dim=1))
+
+            return self.out(d1)
+
+    return SmallUNet
+
+
+def dice_loss_from_logits(logits, target, eps=1e-6):
+    import torch
+
+    prob = torch.sigmoid(logits)
+    prob = prob.reshape(prob.size(0), -1)
+    target = target.reshape(target.size(0), -1)
+
+    inter = (prob * target).sum(dim=1)
+    union = prob.sum(dim=1) + target.sum(dim=1)
+
+    dice = (2 * inter + eps) / (union + eps)
+    return 1.0 - dice.mean()
 
 def safe_id(s):
     return re.sub(r"[^A-Za-z0-9_\-]+", "_", str(s)).strip("_")
@@ -1382,12 +1685,12 @@ def build_parser():
 
     p.add_argument(
         "--features_dir",
-        default="/research/users/mesmaeil/RETINA_ALL/features"
+        default="features"
     )
 
     p.add_argument(
         "--debug_dir",
-        default="/research/users/mesmaeil/RETINA_ALL/debug"
+        default="debug"
     )
 
     p.add_argument("--save_debug", action="store_true")
@@ -1403,12 +1706,12 @@ def build_parser():
 
     p.add_argument(
         "--model_path",
-        default="/research/users/mesmaeil/RETINA_ALL/models/robust_curvelet_unet.pt"
+        default="models/ablation_rgb_fov_scale_directional_last.pt"
     )
 
     p.add_argument(
         "--pred_dir",
-        default="/research/users/mesmaeil/RETINA_ALL/predictions"
+        default="predictions"
     )
 
     p.add_argument(
