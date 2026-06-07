@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retinal Vessel Segmentation Demo</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #050505;
+      color: #f5f5f5;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 35px 24px 60px;
+    }
+
+    .top {
+      border-bottom: 1px dashed #355c2a;
+      padding-bottom: 18px;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      font-size: 34px;
+      letter-spacing: 2px;
+      margin: 0;
+      color: white;
+    }
+
+    .subtitle {
+      color: #b8ff8f;
+      font-size: 18px;
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+
+    .demo-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .panel {
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 16px;
+      padding: 22px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      font-size: 18px;
+      letter-spacing: 3px;
+      color: white;
+    }
+
+    .info {
+      color: #b8ff8f;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    .buttons {
+      margin-top: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      background: #151515;
+      color: white;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 15px;
+      cursor: pointer;
+      text-align: left;
+      font-family: Georgia, "Times New Roman", serif;
+      letter-spacing: 1px;
+    }
+
+    button:hover {
+      border-color: #b8ff8f;
+      color: #b8ff8f;
+    }
+
+    button.active {
+      background: #20351a;
+      border-color: #b8ff8f;
+      color: #b8ff8f;
+    }
+
+    .case-title {
+      margin-top: 26px;
+      color: #ffffff;
+      font-size: 15px;
+      letter-spacing: 2px;
+      border-top: 1px solid #222;
+      padding-top: 18px;
+    }
+
+    .viewer {
+      background: black;
+      border: 1px solid #222;
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .viewer-title {
+      font-size: 22px;
+      font-style: italic;
+      margin-bottom: 16px;
+      color: white;
+    }
+
+    .viewer img {
+      max-width: 100%;
+      max-height: 720px;
+      border-radius: 10px;
+      background: black;
+    }
+
+    .caption {
+      margin-top: 16px;
+      color: #b8ff8f;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      margin-top: 28px;
+      color: #aaa;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 850px) {
+      .demo-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <div class="top">
+      <h1>Retinal Vessel Segmentation Demo</h1>
+      <div class="subtitle">
+        Curvelet-guided deep learning for retinal blood vessel extraction from colour fundus images.
+      </div>
+    </div>
+
+    <div class="demo-layout">
+      <div class="panel">
+        <h2>DEMO</h2>
+
+        <div class="info">
+          Input: colour fundus image<br>
+          Task: vessel segmentation<br>
+          Model: curvelet-guided U-Net<br>
+          Output: vessel mask and overlay
+        </div>
+
+        <div class="case-title">DR CASE</div>
+        <div class="buttons">
+          <button class="active" onclick="showImage('dr_original', this)">DR original image</button>
+          <button onclick="showImage('dr_probability', this)">DR probability map</button>
+          <button onclick="showImage('dr_mask', this)">DR vessel mask</button>
+          <button onclick="showImage('dr_overlay', this)">DR overlay result</button>
+        </div>
+
+        <div class="case-title">TEST CASE</div>
+        <div class="buttons">
+          <button onclick="showImage('test_original', this)">Test original image</button>
+          <button onclick="showImage('test_probability', this)">Test probability map</button>
+          <button onclick="showImage('test_mask', this)">Test vessel mask</button>
+          <button onclick="showImage('test_overlay', this)">Test overlay result</button>
+        </div>
+      </div>
+
+      <div class="viewer">
+        <div id="viewer-title" class="viewer-title">DR original image</div>
+
+        <img id="demo-image" src="examples/dr_original.png" alt="Retinal vessel segmentation demo" />
+
+        <div id="caption" class="caption">
+          Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline.
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      This demo shows precomputed outputs from the trained model. The full inference command is available in the repository README.
+    </div>
+  </div>
+
+  <script>
+    const images = {
+      dr_original: {
+        title: "DR original image",
+        src: "examples/dr_original.png",
+        caption: "Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline."
+      },
+      dr_probability: {
+        title: "DR vessel probability map",
+        src: "examples/dr_probability.png",
+        caption: "Model probability map showing vessel-likelihood responses for the DR case."
+      },
+      dr_mask: {
+        title: "DR binary vessel mask",
+        src: "examples/dr_mask.png",
+        caption: "Final binary vessel segmentation mask for the DR case."
+      },
+      dr_overlay: {
+        title: "DR overlay result",
+        src: "examples/dr_overlay.png",
+        caption: "Predicted vessels overlaid on the original DR fundus image."
+      },
+
+      test_original: {
+        title: "Test original image",
+        src: "examples/test_original.png",
+        caption: "Original test fundus image used as input to the vessel segmentation pipeline."
+      },
+      test_probability: {
+        title: "Test vessel probability map",
+        src: "examples/test_probability.png",
+        caption: "Model probability map showing vessel-likelihood responses for the test case."
+      },
+      test_mask: {
+        title: "Test binary vessel mask",
+        src: "examples/test_vessel_mask.png",
+        caption: "Final binary vessel segmentation mask for the test case."
+      },
+      test_overlay: {
+        title: "Test overlay result",
+        src: "examples/test_overlay.png",
+        caption: "Predicted vessels overlaid on the original test fundus image."
+      }
+    };
+
+    function showImage(key, button) {
+      document.getElementById("viewer-title").innerText = images[key].title;
+      document.getElementById("demo-image").src = images[key].src;
+      document.getElementById("caption").innerText = images[key].caption;
+
+      document.querySelectorAll("button").forEach(btn => btn.classList.remove("active"));
+      button.classList.add("active");
+    }
+  </script>
+</body>
+</html>
