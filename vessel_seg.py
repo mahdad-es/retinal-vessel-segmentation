@@ -27,7 +27,9 @@ from MultiRetina_Curvelet_UNet import (
 
 
 def ensure_dir(path):
-    Path(path).mkdir(parents=True, exist_ok=True)
+    path = Path(path)
+    if str(path) not in ["", "."]:
+        path.mkdir(parents=True, exist_ok=True)
 
 
 def read_rgb_general(path, size):
@@ -265,6 +267,15 @@ def segment_one_image(args):
         device=device,
         base_channels=args.base_channels,
     )
+    expected_channels = next(model.parameters()).shape[1]
+    actual_channels = features.shape[-1]
+    
+    if actual_channels != expected_channels:
+        raise ValueError(
+            f"Input-channel mismatch: the generated image features have {actual_channels} channels, "
+            f"but the loaded model expects {expected_channels} channels. "
+            "Please use the same feature-generation pipeline that was used during training."
+        )
 
     x = torch.from_numpy(features.transpose(2, 0, 1)[None]).to(device)
 
@@ -355,9 +366,9 @@ def build_parser():
     )
 
     parser.add_argument(
-        "--model_path",
-        default="/research/users/mesmaeil/RETINA_ALL/models/robust_curvelet_unet.pt",
-        help="Path to trained checkpoint.",
+    "--model_path",
+    default="models/ablation_rgb_fov_scale_directional_last.pt",
+    help="Path to trained checkpoint.",
     )
 
     parser.add_argument(
