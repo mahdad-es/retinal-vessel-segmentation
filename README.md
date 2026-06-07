@@ -34,6 +34,22 @@ The pipeline includes:
 Project originally developed as part of my retinal image analysis research.  
 This repository is being prepared as a public project page for presentation and reproducibility.
 
+## Quick Start
+
+Segment retinal vessels from one colour fundus image:
+
+```bash
+python vessel_seg.py input_image.png output_vessel_mask.png
+
+Example with optional probability map and overlay:
+python vessel_seg.py examples/example_fundus.png outputs/example_vessel_mask.png \
+  --model_path models/ablation_rgb_fov_scale_directional_last.pt \
+  --output_prob outputs/example_probability.png \
+  --output_overlay outputs/example_overlay.png \
+  --device auto
+
+  
+
 ## Author
 
 Mahdad Esmaeili, PhD  
