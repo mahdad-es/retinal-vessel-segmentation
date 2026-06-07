@@ -344,30 +344,31 @@ fov</pre>
             Output: vessel mask and overlay
           </div>
 
-          <div class="case-title">DR CASE</div>
+          <div class="case-title">CASE 1 — COARSE VESSEL EXAMPLE</div>
           <div class="buttons">
-            <button class="active" onclick="showImage('dr_original', this)">DR original image</button>
-            <button onclick="showImage('dr_probability', this)">DR probability map</button>
-            <button onclick="showImage('dr_mask', this)">DR vessel mask</button>
-            <button onclick="showImage('dr_overlay', this)">DR overlay result</button>
+            <button class="active" onclick="showImage('case1_original', this)">Case 1 original image</button>
+            <button onclick="showImage('case1_probability', this)">Case 1 probability map</button>
+            <button onclick="showImage('case1_mask', this)">Case 1 vessel mask</button>
+            <button onclick="showImage('case1_overlay', this)">Case 1 overlay result</button>
           </div>
-
-          <div class="case-title">TEST CASE</div>
+          
+          <div class="case-title">CASE 2 — FINE VESSEL EXAMPLE</div>
           <div class="buttons">
-            <button onclick="showImage('test_original', this)">Test original image</button>
-            <button onclick="showImage('test_probability', this)">Test probability map</button>
-            <button onclick="showImage('test_mask', this)">Test vessel mask</button>
-            <button onclick="showImage('test_overlay', this)">Test overlay result</button>
+            <button onclick="showImage('case2_original', this)">Case 2 original image</button>
+            <button onclick="showImage('case2_probability', this)">Case 2 probability map</button>
+            <button onclick="showImage('case2_mask', this)">Case 2 vessel mask</button>
+            <button onclick="showImage('case2_overlay', this)">Case 2 overlay result</button>
           </div>
         </div>
 
         <div class="viewer">
-          <div id="viewer-title" class="viewer-title">DR original image</div>
-
+          
+          <div id="viewer-title" class="viewer-title">Case 1 original image</div>
+          
           <img id="demo-image" src="examples/dr_original.png" alt="Retinal vessel segmentation demo" />
-
+          
           <div id="caption" class="caption">
-            Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline.
+            Original fundus image for Case 1, used as input to the vessel segmentation pipeline.
           </div>
         </div>
       </div>
@@ -396,58 +397,59 @@ fov</pre>
     </div>
   </div>
 
-  <script>
-    const images = {
-      dr_original: {
-        title: "DR original image",
-        src: "examples/dr_original.png",
-        caption: "Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline."
-      },
-      dr_probability: {
-        title: "DR vessel probability map",
-        src: "examples/dr_probability.png",
-        caption: "Model probability map showing vessel-likelihood responses for the DR case."
-      },
-      dr_mask: {
-        title: "DR binary vessel mask",
-        src: "examples/dr_mask.png",
-        caption: "Final binary vessel segmentation mask for the DR case."
-      },
-      dr_overlay: {
-        title: "DR overlay result",
-        src: "examples/dr_overlay.png",
-        caption: "Predicted vessels overlaid on the original DR fundus image."
-      },
-      test_original: {
-        title: "Test original image",
-        src: "examples/test_original.png",
-        caption: "Original test fundus image used as input to the vessel segmentation pipeline."
-      },
-      test_probability: {
-        title: "Test vessel probability map",
-        src: "examples/test_probability.png",
-        caption: "Model probability map showing vessel-likelihood responses for the test case."
-      },
-      test_mask: {
-        title: "Test binary vessel mask",
-        src: "examples/test_vessel_mask.png",
-        caption: "Final binary vessel segmentation mask for the test case."
-      },
-      test_overlay: {
-        title: "Test overlay result",
-        src: "examples/test_overlay.png",
-        caption: "Predicted vessels overlaid on the original test fundus image."
-      }
-    };
+<script>
+  const images = {
+    case1_original: {
+      title: "Case 1 original image",
+      src: "examples/dr_original.png",
+      caption: "Original fundus image for Case 1, showing a vessel pattern dominated by larger/coarser vessels."
+    },
+    case1_probability: {
+      title: "Case 1 vessel probability map",
+      src: "examples/dr_probability.png",
+      caption: "Probability map for Case 1, showing model vessel-likelihood responses before thresholding."
+    },
+    case1_mask: {
+      title: "Case 1 binary vessel mask",
+      src: "examples/dr_mask.png",
+      caption: "Final binary vessel segmentation mask for Case 1."
+    },
+    case1_overlay: {
+      title: "Case 1 overlay result",
+      src: "examples/dr_overlay.png",
+      caption: "Predicted vessels overlaid on the original fundus image for Case 1."
+    },
 
-    function showImage(key, button) {
-      document.getElementById("viewer-title").innerText = images[key].title;
-      document.getElementById("demo-image").src = images[key].src;
-      document.getElementById("caption").innerText = images[key].caption;
-
-      document.querySelectorAll("button").forEach(btn => btn.classList.remove("active"));
-      button.classList.add("active");
+    case2_original: {
+      title: "Case 2 original image",
+      src: "examples/test_original.png",
+      caption: "Original fundus image for Case 2, showing a wider field with many fine vessel branches."
+    },
+    case2_probability: {
+      title: "Case 2 vessel probability map",
+      src: "examples/test_probability.png",
+      caption: "Probability map for Case 2, showing model responses for both major and fine vessels."
+    },
+    case2_mask: {
+      title: "Case 2 binary vessel mask",
+      src: "examples/test_vessel_mask.png",
+      caption: "Final binary vessel segmentation mask for Case 2."
+    },
+    case2_overlay: {
+      title: "Case 2 overlay result",
+      src: "examples/test_overlay.png",
+      caption: "Predicted vessels overlaid on the original fundus image for Case 2."
     }
-  </script>
+  };
+
+  function showImage(key, button) {
+    document.getElementById("viewer-title").innerText = images[key].title;
+    document.getElementById("demo-image").src = images[key].src;
+    document.getElementById("caption").innerText = images[key].caption;
+
+    document.querySelectorAll("button").forEach(btn => btn.classList.remove("active"));
+    button.classList.add("active");
+  }
+</script>
 </body>
 </html>
