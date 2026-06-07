@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Retinal Vessel Segmentation Demo</title>
+  <title>Retinal Vessel Segmentation</title>
 
   <style>
     body {
@@ -14,19 +14,19 @@
     }
 
     .page {
-      max-width: 1200px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 35px 24px 60px;
+      padding: 38px 24px 70px;
     }
 
     .top {
       border-bottom: 1px dashed #355c2a;
-      padding-bottom: 18px;
+      padding-bottom: 22px;
       margin-bottom: 30px;
     }
 
     h1 {
-      font-size: 34px;
+      font-size: 38px;
       letter-spacing: 2px;
       margin: 0;
       color: white;
@@ -36,7 +36,72 @@
       color: #b8ff8f;
       font-size: 18px;
       margin-top: 12px;
-      line-height: 1.5;
+      line-height: 1.6;
+      max-width: 950px;
+    }
+
+    .section {
+      background: #0b0b0b;
+      border: 1px solid #202020;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      color: white;
+      font-size: 22px;
+      letter-spacing: 2px;
+      margin-top: 0;
+      margin-bottom: 14px;
+    }
+
+    p {
+      color: #d8ffd0;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    ul, ol {
+      color: #d8ffd0;
+      line-height: 1.8;
+      font-size: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      background: #101010;
+      border: 1px solid #222;
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .card-title {
+      color: #b8ff8f;
+      font-size: 17px;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    code {
+      color: #b8ff8f;
+      background: #111;
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+
+    pre {
+      background: #111;
+      color: #b8ff8f;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+      border: 1px solid #222;
     }
 
     .demo-layout {
@@ -53,7 +118,7 @@
       padding: 22px;
     }
 
-    .panel h2 {
+    .panel h3 {
       margin-top: 0;
       font-size: 18px;
       letter-spacing: 3px;
@@ -67,7 +132,7 @@
     }
 
     .buttons {
-      margin-top: 22px;
+      margin-top: 18px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -98,12 +163,12 @@
     }
 
     .case-title {
-      margin-top: 26px;
-      color: #ffffff;
+      margin-top: 24px;
+      color: white;
       font-size: 15px;
       letter-spacing: 2px;
       border-top: 1px solid #222;
-      padding-top: 18px;
+      padding-top: 16px;
     }
 
     .viewer {
@@ -136,15 +201,25 @@
     }
 
     .footer {
-      margin-top: 28px;
+      margin-top: 30px;
       color: #aaa;
       font-size: 14px;
       line-height: 1.6;
+      border-top: 1px dashed #355c2a;
+      padding-top: 20px;
     }
 
     @media (max-width: 850px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
       .demo-layout {
         grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 30px;
       }
     }
   </style>
@@ -152,54 +227,172 @@
 
 <body>
   <div class="page">
+
     <div class="top">
-      <h1>Retinal Vessel Segmentation Demo</h1>
+      <h1>Deep Learning for Retinal Blood Vessel Segmentation</h1>
       <div class="subtitle">
-        Curvelet-guided deep learning for retinal blood vessel extraction from colour fundus images.
+        A curvelet-guided deep-learning pipeline for automatic retinal blood vessel segmentation
+        from colour fundus images, combining vessel-enhancing feature extraction with a U-Net-based
+        segmentation model and vessel-aware evaluation.
       </div>
     </div>
 
-    <div class="demo-layout">
-      <div class="panel">
-        <h2>DEMO</h2>
+    <div class="section">
+      <h2>Project Overview</h2>
+      <p>
+        This project focuses on automatic retinal blood vessel segmentation from colour fundus photography.
+        Retinal vessel segmentation is an important step in computer-aided retinal image analysis and can
+        support quantitative assessment of vascular morphology in ophthalmic screening.
+      </p>
+      <p>
+        The method combines field-of-view extraction, curvelet coefficient energy representations,
+        scale- and direction-aware vessel features, and a U-Net segmentation model to produce retinal
+        vessel masks from fundus images.
+      </p>
+    </div>
 
-        <div class="info">
-          Input: colour fundus image<br>
-          Task: vessel segmentation<br>
-          Model: curvelet-guided U-Net<br>
-          Output: vessel mask and overlay
-        </div>
-
-        <div class="case-title">DR CASE</div>
-        <div class="buttons">
-          <button class="active" onclick="showImage('dr_original', this)">DR original image</button>
-          <button onclick="showImage('dr_probability', this)">DR probability map</button>
-          <button onclick="showImage('dr_mask', this)">DR vessel mask</button>
-          <button onclick="showImage('dr_overlay', this)">DR overlay result</button>
-        </div>
-
-        <div class="case-title">TEST CASE</div>
-        <div class="buttons">
-          <button onclick="showImage('test_original', this)">Test original image</button>
-          <button onclick="showImage('test_probability', this)">Test probability map</button>
-          <button onclick="showImage('test_mask', this)">Test vessel mask</button>
-          <button onclick="showImage('test_overlay', this)">Test overlay result</button>
-        </div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Aim</div>
+        <p>
+          The aim is to segment retinal blood vessels accurately and evaluate the predicted vascular
+          structures using both pixel-level and topology-aware metrics.
+        </p>
       </div>
 
-      <div class="viewer">
-        <div id="viewer-title" class="viewer-title">DR original image</div>
+      <div class="card">
+        <div class="card-title">Clinical and Research Relevance</div>
+        <p>
+          Retinal vessel segmentation can support ophthalmic image analysis, diabetic retinopathy screening,
+          vessel morphology assessment, and clinically motivated AI pipelines.
+        </p>
+      </div>
+    </div>
 
-        <img id="demo-image" src="examples/dr_original.png" alt="Retinal vessel segmentation demo" />
+    <div class="section">
+      <h2>Curvelet-Guided Pipeline</h2>
+      <ol>
+        <li>Colour fundus image preprocessing</li>
+        <li>Field-of-view extraction</li>
+        <li>Gaussian background-subtraction enhancement of the green channel</li>
+        <li>Curvelet coefficient energy-map generation</li>
+        <li>Scale-energy and directional-energy feature extraction</li>
+        <li>U-Net-based vessel segmentation</li>
+        <li>Vessel-aware training and evaluation</li>
+      </ol>
+    </div>
 
-        <div id="caption" class="caption">
-          Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline.
+    <div class="section">
+      <h2>Model Input Features</h2>
+      <p>
+        The released model checkpoint uses RGB fundus information, field-of-view masking,
+        curvelet scale-energy features, and directional-energy features.
+      </p>
+
+      <pre>red, green, blue,
+scale_energy_s1, scale_energy_s2, scale_energy_s3, scale_energy_s4, scale_energy_s5,
+directional_energy_g1, directional_energy_g2, directional_energy_g3, directional_energy_g4,
+fov</pre>
+
+      <p>
+        Final checkpoint:
+        <code>models/ablation_rgb_fov_scale_directional_last.pt</code>
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Evaluation Metrics</h2>
+      <ul>
+        <li>Dice score</li>
+        <li>Intersection over Union</li>
+        <li>Sensitivity</li>
+        <li>Specificity</li>
+        <li>clDice</li>
+        <li>Skeleton Dice</li>
+        <li>Component-count error</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Local Inference</h2>
+      <p>
+        A single fundus image can be processed using the following command:
+      </p>
+
+      <pre>python vessel_seg.py examples/test_original.png outputs/test_vessel_mask.png \
+  --model_path models/ablation_rgb_fov_scale_directional_last.pt \
+  --output_prob outputs/test_probability.png \
+  --output_overlay outputs/test_overlay.png \
+  --device auto</pre>
+    </div>
+
+    <div class="section">
+      <h2>Interactive Demo</h2>
+      <p>
+        This demo shows precomputed outputs from the trained model. Use the buttons to switch between
+        the original fundus image, probability map, binary vessel mask, and overlay result.
+      </p>
+
+      <div class="demo-layout">
+        <div class="panel">
+          <h3>DEMO</h3>
+
+          <div class="info">
+            Input: colour fundus image<br>
+            Task: vessel segmentation<br>
+            Model: curvelet-guided U-Net<br>
+            Output: vessel mask and overlay
+          </div>
+
+          <div class="case-title">DR CASE</div>
+          <div class="buttons">
+            <button class="active" onclick="showImage('dr_original', this)">DR original image</button>
+            <button onclick="showImage('dr_probability', this)">DR probability map</button>
+            <button onclick="showImage('dr_mask', this)">DR vessel mask</button>
+            <button onclick="showImage('dr_overlay', this)">DR overlay result</button>
+          </div>
+
+          <div class="case-title">TEST CASE</div>
+          <div class="buttons">
+            <button onclick="showImage('test_original', this)">Test original image</button>
+            <button onclick="showImage('test_probability', this)">Test probability map</button>
+            <button onclick="showImage('test_mask', this)">Test vessel mask</button>
+            <button onclick="showImage('test_overlay', this)">Test overlay result</button>
+          </div>
+        </div>
+
+        <div class="viewer">
+          <div id="viewer-title" class="viewer-title">DR original image</div>
+
+          <img id="demo-image" src="examples/dr_original.png" alt="Retinal vessel segmentation demo" />
+
+          <div id="caption" class="caption">
+            Original diabetic-retinopathy fundus image used as input to the vessel segmentation pipeline.
+          </div>
         </div>
       </div>
+    </div>
+
+    <div class="section">
+      <h2>Project Status</h2>
+      <p>
+        This project is based on earlier retinal image analysis research and has been documented here
+        as a public project page for presentation, discussion, and reproducibility.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Author</h2>
+      <p>
+        Mahdad Esmaeili, PhD<br>
+        Postdoctoral Researcher<br>
+        A.I. Virtanen Institute for Molecular Sciences<br>
+        University of Eastern Finland, Kuopio, Finland
+      </p>
     </div>
 
     <div class="footer">
-      This demo shows precomputed outputs from the trained model. The full inference command is available in the repository README.
+      Repository: curvelet-guided retinal blood vessel segmentation from colour fundus images.
     </div>
   </div>
 
@@ -225,7 +418,6 @@
         src: "examples/dr_overlay.png",
         caption: "Predicted vessels overlaid on the original DR fundus image."
       },
-
       test_original: {
         title: "Test original image",
         src: "examples/test_original.png",
