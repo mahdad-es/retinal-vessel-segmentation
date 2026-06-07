@@ -388,15 +388,15 @@ fov</pre>
             Output: vessel mask and overlay
           </div>
 
-          <div class="case-title">CASE 1 — COARSE VESSEL EXAMPLE</div>
+          <div class="case-title">CASE 1 — FINE VESSEL EXAMPLE</div>
           <div class="buttons">
             <button class="active" onclick="showImage('case1_original', this)">Case 1 original image</button>
             <button onclick="showImage('case1_probability', this)">Case 1 probability map</button>
             <button onclick="showImage('case1_mask', this)">Case 1 vessel mask</button>
             <button onclick="showImage('case1_overlay', this)">Case 1 overlay result</button>
           </div>
-
-          <div class="case-title">CASE 2 — FINE VESSEL EXAMPLE</div>
+          
+          <div class="case-title">CASE 2 — COARSE VESSEL EXAMPLE</div>
           <div class="buttons">
             <button onclick="showImage('case2_original', this)">Case 2 original image</button>
             <button onclick="showImage('case2_probability', this)">Case 2 probability map</button>
@@ -450,33 +450,33 @@ fov</pre>
       case1_original: {
         title: "Case 1 original image",
         src: "examples/dr_original.png",
-        caption: "Original fundus image for Case 1, showing a vessel pattern dominated by larger/coarser vessels."
+        caption: "Original fundus image for Case 1, showing many fine retinal vessel branches."
       },
       case1_probability: {
         title: "Case 1 vessel probability map",
         src: "examples/dr_probability.png",
-        caption: "Probability map for Case 1, showing model vessel-likelihood responses before thresholding."
+        caption: "Probability map for Case 1, showing model responses for fine vessel structures before thresholding."
       },
       case1_mask: {
         title: "Case 1 binary vessel mask",
         src: "examples/dr_mask.png",
-        caption: "Final binary vessel segmentation mask for Case 1."
+        caption: "Final binary vessel segmentation mask for Case 1, highlighting fine vessels."
       },
       case1_overlay: {
         title: "Case 1 overlay result",
         src: "examples/dr_overlay.png",
         caption: "Predicted vessels overlaid on the original fundus image for Case 1."
       },
-
+  
       case2_original: {
         title: "Case 2 original image",
         src: "examples/test_original.png",
-        caption: "Original fundus image for Case 2, showing a wider field with many fine vessel branches."
+        caption: "Original fundus image for Case 2, showing a vessel pattern dominated by larger and coarser vessels."
       },
       case2_probability: {
         title: "Case 2 vessel probability map",
         src: "examples/test_probability.png",
-        caption: "Probability map for Case 2, showing model responses for both major and fine vessels."
+        caption: "Probability map for Case 2, showing model responses for major vessel structures."
       },
       case2_mask: {
         title: "Case 2 binary vessel mask",
@@ -489,16 +489,16 @@ fov</pre>
         caption: "Predicted vessels overlaid on the original fundus image for Case 2."
       }
     };
-
+  
     function showImage(key, button) {
       document.getElementById("viewer-title").innerText = images[key].title;
       document.getElementById("demo-image").src = images[key].src;
       document.getElementById("caption").innerText = images[key].caption;
-
+  
       document.querySelectorAll("button").forEach(btn => btn.classList.remove("active"));
       button.classList.add("active");
     }
-
+  
     window.onload = function() {
       document.getElementById("viewer-title").innerText = images.case1_original.title;
       document.getElementById("demo-image").src = images.case1_original.src;
