@@ -1,38 +1,71 @@
 #!/usr/bin/env python3
+"""
+vessel_seg.py
+
+Single-image inference script for curvelet-guided retinal blood vessel segmentation.
+
+This script is designed for the checkpoint:
+    models/ablation_rgb_fov_scale_directional_last.pt
+
+It generates the same full 14-channel feature tensor used during training:
+    0  red
+    1  green
+    2  blue
+    3  gaussian_enhanced_green
+    4  scale_energy_s1
+    5  scale_energy_s2
+    6  scale_energy_s3
+    7  scale_energy_s4
+    8  scale_energy_s5
+    9  directional_energy_g1
+    10 directional_energy_g2
+    11 directional_energy_g3
+    12 directional_energy_g4
+    13 fov
+
+Then it selects the exact channels stored inside the checkpoint.
+"""
+
 import argparse
 from pathlib import Path
 
 import numpy as np
 import imageio.v3 as iio
 import torch
-
 from skimage.transform import resize
-from skimage.morphology import disk
-from scipy.ndimage import (
-    binary_opening,
-    binary_closing,
-    binary_erosion,
-    binary_dilation,
-    label as ndi_label,
-)
 
 from MultiRetina_Curvelet_UNet import (
+    ensure_dir,
     matlab_uint8,
     normalize01,
-    local_green_enhancement,
-    curvelet_greycontrast_step,
-    curvelet_edge_step,
+    read_binary_mask_general,
+    make_fov,
+    curvelet_energy_feature_maps,
+    enhance_green_gaussian_bg,
     get_model_classes,
 )
 
 
-def ensure_dir(path):
-    path = Path(path)
-    if str(path) not in ["", "."]:
-        path.mkdir(parents=True, exist_ok=True)
+FULL_CHANNEL_NAMES = [
+    "red",
+    "green",
+    "blue",
+    "gaussian_enhanced_green",
+    "scale_energy_s1",
+    "scale_energy_s2",
+    "scale_energy_s3",
+    "scale_energy_s4",
+    "scale_energy_s5",
+    "directional_energy_g1",
+    "directional_energy_g2",
+    "directional_energy_g3",
+    "directional_energy_g4",
+    "fov",
+]
 
 
-def read_rgb_general(path, size):
+def read_rgb_with_original_shape(path, size):
+    """Read an image as RGB, resize for the network, and keep original H,W."""
     img = np.squeeze(iio.imread(path))
 
     if img.ndim == 2:
@@ -52,164 +85,76 @@ def read_rgb_general(path, size):
 
     original_shape = img.shape[:2]
 
-    img = resize(
+    img_resized = resize(
         img,
         (size, size, 3),
         preserve_range=True,
         anti_aliasing=True,
     )
 
-    return matlab_uint8(img), original_shape
+    return matlab_uint8(img_resized), original_shape, matlab_uint8(img)
 
 
-def read_binary_mask_general(path, size):
-    m = np.squeeze(iio.imread(path))
+def build_full_feature_tensor(image_path, size=512, roi_path=None):
+    """
+    Build the full 14-channel feature tensor used by the multi-retina training code.
+    Returns:
+        features_full: [H, W, 14]
+        fov:           [H, W] boolean mask in resized/network space
+        original_shape: original image shape before resizing
+        rgb_original:  original RGB image for overlay output
+    """
+    rgb, original_shape, rgb_original = read_rgb_with_original_shape(image_path, size=size)
 
-    if m.ndim == 3:
-        if m.shape[-1] >= 3:
-            m = m[..., :3].max(axis=-1)
-        else:
-            m = m.max(axis=0)
-
-    if m.ndim != 2:
-        raise ValueError(f"Cannot read ROI mask {path}, shape={m.shape}")
-
-    m_bin = m > 0
-
-    out = resize(
-        m_bin.astype(np.uint8),
-        (size, size),
-        preserve_range=True,
-        anti_aliasing=False,
-        order=0,
-    )
-
-    return out > 0
-
-
-def make_fov_from_rgb(rgb, erode_radius=8):
-    green = rgb[:, :, 1].astype(np.float32)
-
-    fov = green > 10
-
-    fov = binary_opening(
-        fov,
-        structure=np.ones((5, 5), dtype=bool),
-    )
-
-    fov = binary_closing(
-        fov,
-        structure=np.ones((25, 25), dtype=bool),
-    )
-
-    lab, num = ndi_label(fov)
-
-    if num > 0:
-        counts = np.bincount(lab.ravel())
-        counts[0] = 0
-        fov = lab == np.argmax(counts)
-
-    if erode_radius > 0:
-        fov_inner = binary_erosion(fov, structure=disk(erode_radius))
-    else:
-        fov_inner = fov.copy()
-
-    return fov.astype(bool), fov_inner.astype(bool)
-
-
-def make_fov(rgb, roi_path, size, erode_radius=8):
-    if roi_path is not None and str(roi_path).strip() != "" and Path(roi_path).exists():
-        fov = read_binary_mask_general(roi_path, size=size)
-
-        lab, num = ndi_label(fov)
-
-        if num > 0:
-            counts = np.bincount(lab.ravel())
-            counts[0] = 0
-            fov = lab == np.argmax(counts)
-
-        if erode_radius > 0:
-            fov_inner = binary_erosion(fov, structure=disk(erode_radius))
-        else:
-            fov_inner = fov.copy()
-
-        return fov.astype(bool), fov_inner.astype(bool)
-
-    return make_fov_from_rgb(rgb, erode_radius=erode_radius)
-
-
-def build_features_from_image(image_path, size=512, roi_path=None):
-    rgb, original_shape = read_rgb_general(image_path, size=size)
-
-    fov, fov_inner = make_fov(
-        rgb,
-        roi_path=roi_path,
-        size=size,
-        erode_radius=8,
-    )
+    # Same FOV strategy as training: ROI if provided, otherwise estimated from RGB.
+    fov = make_fov(rgb, roi_path=roi_path, size=size)
 
     red = rgb[:, :, 0].astype(np.float64)
     green = rgb[:, :, 1].astype(np.float64)
     blue = rgb[:, :, 2].astype(np.float64)
 
-    enhanced_green = local_green_enhancement(green)
+    # Same enhancement used for scale/directional energy maps in training.
+    enhanced_green = enhance_green_gaussian_bg(green, sigma=15)
 
-    if np.any(fov):
-        mean_inside = np.mean(enhanced_green[fov])
-    else:
-        mean_inside = np.mean(enhanced_green)
+    scale_energy_maps, directional_energy_maps = curvelet_energy_feature_maps(
+        enhanced_green,
+        fov=fov,
+        n_dir_groups=4,
+        skip_coarse=True,
+    )
 
-    binary_for_curvelet = np.ones((size, size), dtype=np.float64)
-    binary_for_curvelet[matlab_uint8(enhanced_green) > mean_inside] = 0.0
-    binary_for_curvelet[~fov] = 0.0
+    # The training setup expects 5 scale maps and 4 directional maps.
+    if len(scale_energy_maps) != 5:
+        raise RuntimeError(
+            f"Expected 5 scale-energy maps, but got {len(scale_energy_maps)}. "
+            "Check curvelops/FDCT settings in MultiRetina_Curvelet_UNet.py."
+        )
 
-    curvelet_first = curvelet_greycontrast_step(enhanced_green)
-    curvelet_first[~fov] = 0.0
+    if len(directional_energy_maps) != 4:
+        raise RuntimeError(
+            f"Expected 4 directional-energy maps, but got {len(directional_energy_maps)}."
+        )
 
-    x2 = matlab_uint8(curvelet_first)
+    feature_list = [
+        normalize01(red, fov),
+        normalize01(green, fov),
+        normalize01(blue, fov),
+        normalize01(enhanced_green, fov),
+    ]
 
-    curvelet_second = curvelet_edge_step(x2.astype(np.float64))
+    feature_list.extend([m.astype(np.float32) for m in scale_energy_maps])
+    feature_list.extend([m.astype(np.float32) for m in directional_energy_maps])
+    feature_list.append(fov.astype(np.float32))
 
-    curvelet_positive = np.where(curvelet_second > 0, curvelet_second, 0.0)
-    curvelet_positive[~fov_inner] = 0.0
+    features_full = np.stack(feature_list, axis=-1).astype(np.float32)
 
-    if np.max(curvelet_positive) > 0:
-        curvelet_positive = curvelet_positive / np.max(curvelet_positive) * 256.0
-    else:
-        curvelet_positive = np.zeros_like(curvelet_positive)
+    if features_full.shape[-1] != 14:
+        raise RuntimeError(f"Expected 14 full channels, but got {features_full.shape[-1]}")
 
-    vals = curvelet_positive[fov_inner]
-    vals = vals[vals > 0]
-
-    if vals.size > 0:
-        candidate_thr = np.percentile(vals, 70)
-    else:
-        candidate_thr = 0.0
-
-    candidate = curvelet_positive > candidate_thr
-    candidate[~fov_inner] = False
-
-    candidate_context = binary_dilation(candidate, structure=disk(1))
-    candidate_context[~fov_inner] = False
-
-    features = np.stack(
-        [
-            normalize01(red, fov),
-            normalize01(green, fov),
-            normalize01(blue, fov),
-            normalize01(enhanced_green, fov),
-            normalize01(curvelet_first, fov_inner),
-            normalize01(curvelet_positive, fov_inner),
-            candidate_context.astype(np.float32),
-            fov_inner.astype(np.float32),
-        ],
-        axis=-1,
-    ).astype(np.float32)
-
-    return features, fov, original_shape
+    return features_full, fov, original_shape, rgb_original
 
 
-def load_model(model_path, device, base_channels=32):
+def load_checkpoint_and_model(model_path, device, base_channels=32):
     ckpt = torch.load(model_path, map_location=device)
 
     if "model_state" in ckpt:
@@ -221,16 +166,11 @@ def load_model(model_path, device, base_channels=32):
     else:
         raise KeyError(f"Cannot find model weights. Checkpoint keys: {list(ckpt.keys())}")
 
-    in_channels = ckpt.get("in_channels", 8)
-    base_channels = ckpt.get("base_channels", base_channels)
+    in_channels = int(ckpt.get("in_channels", 13))
+    base_channels = int(ckpt.get("base_channels", base_channels))
 
     ModelClass = get_model_classes()
-
-    model = ModelClass(
-        in_channels=in_channels,
-        base=base_channels,
-    ).to(device)
-
+    model = ModelClass(in_channels=in_channels, base=base_channels).to(device)
     model.load_state_dict(state, strict=True)
     model.eval()
 
@@ -245,53 +185,44 @@ def load_model(model_path, device, base_channels=32):
     if "best_dice" in ckpt:
         print(f"  best_dice: {ckpt['best_dice']}")
 
-    return model
+    selected_channels = ckpt.get("selected_channels", None)
+    selected_channel_names = ckpt.get("selected_channel_names", None)
 
+    if selected_channels is None:
+        # Fallback for rgb_fov_scale_directional model: RGB + scale + directional + FOV, no Gaussian.
+        selected_channels = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        selected_channel_names = [FULL_CHANNEL_NAMES[i] for i in selected_channels]
+        print("WARNING: checkpoint does not contain selected_channels.")
+        print("Using default RGB + scale-energy + directional-energy + FOV channels.")
+    else:
+        selected_channels = [int(i) for i in selected_channels]
+        if selected_channel_names is None:
+            selected_channel_names = [FULL_CHANNEL_NAMES[i] for i in selected_channels]
+        else:
+            selected_channel_names = [str(x) for x in selected_channel_names]
 
-def segment_one_image(args):
-    device = torch.device(
-        args.device if args.device != "auto"
-        else ("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    print(f"  selected_channels: {selected_channels}")
+    print(f"  selected_channel_names: {selected_channel_names}")
 
-    print(f"Device: {device}")
-
-    features, fov, original_shape = build_features_from_image(
-        args.input_image,
-        size=args.size,
-        roi_path=args.roi,
-    )
-
-    model = load_model(
-        args.model_path,
-        device=device,
-        base_channels=args.base_channels,
-    )
-    expected_channels = next(model.parameters()).shape[1]
-    actual_channels = features.shape[-1]
-    
-    if actual_channels != expected_channels:
+    if len(selected_channels) != in_channels:
         raise ValueError(
-            f"Input-channel mismatch: the generated image features have {actual_channels} channels, "
-            f"but the loaded model expects {expected_channels} channels. "
-            "Please use the same feature-generation pipeline that was used during training."
+            f"Checkpoint expects {in_channels} input channels, but selected_channels has "
+            f"{len(selected_channels)} entries: {selected_channels}"
         )
 
-    x = torch.from_numpy(features.transpose(2, 0, 1)[None]).to(device)
+    return ckpt, model, selected_channels
 
-    with torch.no_grad():
-        logits = model(x)
 
-        if isinstance(logits, (list, tuple)):
-            logits = logits[0]
+def save_resized_outputs(prob, pred, fov, original_shape, rgb_original, args):
+    pred = pred.astype(bool)
+    prob = prob.astype(np.float32)
 
-        prob = torch.sigmoid(logits)[0, 0].detach().cpu().numpy()
-
-    pred = prob > args.threshold
     pred[~fov] = False
+    prob_masked = prob.copy()
+    prob_masked[~fov] = 0.0
 
     output_mask = matlab_uint8(pred.astype(np.uint8) * 255)
-    output_prob = matlab_uint8(prob * 255)
+    output_prob = matlab_uint8(prob_masked * 255)
 
     output_mask_resized = resize(
         output_mask,
@@ -310,7 +241,6 @@ def segment_one_image(args):
 
     output_mask_path = Path(args.output_mask)
     ensure_dir(output_mask_path.parent)
-
     iio.imwrite(output_mask_path, output_mask_resized)
 
     if args.output_prob is not None:
@@ -319,19 +249,13 @@ def segment_one_image(args):
         iio.imwrite(output_prob_path, output_prob_resized)
 
     if args.output_overlay is not None:
-        rgb_original = np.squeeze(iio.imread(args.input_image))
-
         if rgb_original.ndim == 2:
             rgb_original = np.stack([rgb_original, rgb_original, rgb_original], axis=-1)
-
-        if rgb_original.ndim == 3 and rgb_original.shape[-1] > 3:
+        if rgb_original.shape[-1] > 3:
             rgb_original = rgb_original[:, :, :3]
 
-        rgb_original = matlab_uint8(rgb_original)
-
-        overlay = rgb_original.copy()
+        overlay = matlab_uint8(rgb_original).copy()
         vessel_pixels = output_mask_resized > 0
-
         overlay[vessel_pixels, 0] = 255
         overlay[vessel_pixels, 1] = 0
         overlay[vessel_pixels, 2] = 0
@@ -342,33 +266,80 @@ def segment_one_image(args):
 
     print("Done.")
     print(f"Saved mask: {output_mask_path}")
-
     if args.output_prob is not None:
         print(f"Saved probability map: {args.output_prob}")
-
     if args.output_overlay is not None:
         print(f"Saved overlay: {args.output_overlay}")
 
 
+def segment_one_image(args):
+    device = torch.device(
+        args.device if args.device != "auto"
+        else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+
+    print(f"Device: {device}")
+
+    ckpt, model, selected_channels = load_checkpoint_and_model(
+        args.model_path,
+        device=device,
+        base_channels=args.base_channels,
+    )
+
+    features_full, fov, original_shape, rgb_original = build_full_feature_tensor(
+        args.input_image,
+        size=args.size,
+        roi_path=args.roi,
+    )
+
+    if max(selected_channels) >= features_full.shape[-1]:
+        raise ValueError(
+            f"Selected channel index {max(selected_channels)} is outside the full feature tensor "
+            f"with {features_full.shape[-1]} channels."
+        )
+
+    features = features_full[:, :, selected_channels]
+
+    expected_channels = int(ckpt.get("in_channels", features.shape[-1]))
+    actual_channels = features.shape[-1]
+
+    if actual_channels != expected_channels:
+        raise ValueError(
+            f"Input-channel mismatch: selected features have {actual_channels} channels, "
+            f"but the loaded model expects {expected_channels} channels."
+        )
+
+    x = torch.from_numpy(features.transpose(2, 0, 1)[None]).to(device)
+
+    with torch.no_grad():
+        logits = model(x)
+        if isinstance(logits, (list, tuple)):
+            logits = logits[0]
+        prob = torch.sigmoid(logits)[0, 0].detach().cpu().numpy()
+
+    pred = prob > args.threshold
+    save_resized_outputs(prob, pred, fov, original_shape, rgb_original, args)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Segment retinal vessels from one input retinal image."
+        description="Segment retinal vessels from one colour fundus image using a trained curvelet-guided U-Net."
     )
 
     parser.add_argument(
         "input_image",
-        help="Path to input retinal image, for example input.png",
+        help="Path to input retinal image, for example examples/test_01_test.tif",
     )
 
     parser.add_argument(
         "output_mask",
-        help="Path to output binary vessel mask, for example output_mask.png",
+        help="Path to output binary vessel mask, for example outputs/test_01_vessel_mask.png",
     )
 
     parser.add_argument(
-    "--model_path",
-    default="models/ablation_rgb_fov_scale_directional_last.pt",
-    help="Path to trained checkpoint.",
+        "--model_path",
+        default="models/ablation_rgb_fov_scale_directional_last.pt",
+        help="Path to trained checkpoint.",
     )
 
     parser.add_argument(
